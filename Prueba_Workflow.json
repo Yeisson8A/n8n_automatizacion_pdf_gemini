@@ -1,0 +1,195 @@
+{
+  "name": "Prueba_Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fba93372-b531-4ea0-a760-b435b7e11b8a",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -128,
+        -208
+      ],
+      "id": "4cf4ca46-6d77-4fa4-ac8c-537884088224",
+      "name": "Webhook",
+      "webhookId": "fba93372-b531-4ea0-a760-b435b7e11b8a",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "pdf_data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        592,
+        -448
+      ],
+      "id": "191bc87a-886a-431b-996b-f743c6d3244c",
+      "name": "Extract from File",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Organiza el siguiente texto de un PDF en un JSON estructurado. Si algún dato falta, pon null. Devuélvelo SOLO como JSON.\\n\\nTexto:\\n{{ $json.text }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        800,
+        -352
+      ],
+      "id": "2c6abaac-8b0b-4ee4-9676-b37b9fd636f7",
+      "name": "Message a model",
+      "executeOnce": false,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "AlVDYXysjwBxuCdw",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        288,
+        -464
+      ],
+      "id": "3be35a25-94a7-42cf-b515-af8193639a19",
+      "name": "Loop Over Items",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const all = $input.all();     // obtiene todos los items de entrada\nconst first = all[0];         // viene 1 item con todos los binarios\nconst bin = first.binary || {}; \n\nconst output = [];\n\nfor (const key of Object.keys(bin)) {\n  output.push({\n    json: {\n      fileName: bin[key].fileName\n    },\n    binary: {\n      \"pdf_data\": bin[key]      // deja solo 1 archivo por item\n    }\n  });\n}\n\nreturn output;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        -304
+      ],
+      "id": "d30f72e5-64c8-419d-be2a-a351ff1ddf3a",
+      "name": "Convert_to_binary_array"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json.content.parts[0].text;  // Texto completo devuelto por Gemini\n\n// Buscar el bloque JSON usando una expresión regular\nconst match = response.match(/\\{[\\s\\S]*\\}/);\n\nif (!match) {\n  throw new Error(\"No se encontró un JSON válido en la respuesta.\");\n}\n\nlet jsonText = match[0];\n\n// Intentar parsear el JSON\nlet parsed;\n\ntry {\n  parsed = JSON.parse(jsonText);\n} catch (e) {\n  throw new Error(\"El JSON tiene formato incorrecto: \" + e.message);\n}\n\nreturn [{ parsed }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        -288
+      ],
+      "id": "53e91939-e651-4eb3-8a20-bf7798df69c4",
+      "name": "Parse_gemini_response_to_json",
+      "executeOnce": false
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Convert_to_binary_array",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Parse_gemini_response_to_json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert_to_binary_array": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse_gemini_response_to_json": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "0ee37bd9-c462-48dd-9ee7-d55b5c36023d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d465aa97b2bd4d1f88824c80bd9e13908a70509e3f22ba231117d2188eb30d7d"
+  },
+  "id": "Za2CRqyRQDjT9fj4",
+  "tags": []
+}
